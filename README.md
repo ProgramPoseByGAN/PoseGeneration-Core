@@ -85,5 +85,3 @@ python data/preprocessing.py --dataset amass --output_dir ./processed
 
 # 6. 进行模型推理（示例）
 python inference/generate.py --label walking --output ./animations/walk.bvh
-
-
