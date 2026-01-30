@@ -1,32 +1,16 @@
-# 1. 深度学习与科学计算核心
 --index-url https://download.pytorch.org/whl/cu118
 torch==2.1.1
 torchvision==0.16.1
 torchaudio==2.1.1
 
-# 2. 科学计算基础
-numpy==1.24.3  # PyTorch 2.x 官方兼容的稳定版本
-scipy==1.10.1  # 与 numpy 1.24 和 Python 3.9 兼容
-
-# 3. 3D数据与BVH文件处理
-# bvhio 是更现代、功能全面的选择，但若需要更经典稳定的库，可使用下行的 `bvh-python`
+numpy==1.24.3
+scipy==1.10.1
 bvhio==0.3.0
-# bvh-python==0.1  # 备选方案，更轻量但功能较少，更新不频繁
-
-# 4. 训练可视化与进度管理
-tensorboard==2.15.1  # 用于监控训练过程
-tqdm==4.66.1  # 用于命令行进度条
-
-# 5. 评估与数据处理
-scikit-learn==1.3.2  # 用于数据预处理或评估指标计算
-
-# 6. Web服务框架 (用于前后端交互API，根据需求二选一或全选)
-# 方案A：轻量级选择，易于上手
+tensorboard==2.15.1
+tqdm==4.66.1
+scikit-learn==1.3.2
 flask==3.0.0
-# 方案B：高性能选择，自动生成API文档，推荐
 fastapi==0.109.0
-uvicorn[standard]==0.27.0  # 运行FastAPI所需的ASGI服务器
-pydantic==2.5.3  # FastAPI的数据验证基础
-
-# 7. 网络请求
-requests==2.31.0  # 用于在Python代码中发送HTTP请求
+uvicorn[standard]==0.27.0
+pydantic==2.5.3
+requests==2.31.0
