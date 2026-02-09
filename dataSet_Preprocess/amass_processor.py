@@ -16,7 +16,7 @@ from typing import Dict, List, Any, Optional
 
 import numpy as np
 
-# 配置日志系统
+# 配置日志
 # 设置日志级别为INFO，格式包含时间、级别和消息内容
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
