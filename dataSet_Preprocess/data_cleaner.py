@@ -36,8 +36,8 @@ DEFAULT_THRESHOLDS = {
     'static_rotation_threshold': 1e-6,   # 静态旋转变化判断阈值
     
     # 生物力学合理性检查阈值配置
-    'knee_flexion_range': [0, 150],      # 膝关节屈伸角度合理范围(度)
-    'elbow_flexion_range': [0, 150],     # 肘关节屈伸角度合理范围(度)
+    'knee_flexion_range': [-2, 120],     # 膝关节屈伸角度合理范围(度)，收紧下界惩罚过伸
+    'elbow_flexion_range': [-2, 120],    # 肘关节屈伸角度合理范围(度)
     'spine_rotation_threshold': 45,      # 脊柱旋转角度安全上限(度)
     
     # 运动学质量检查阈值配置
@@ -412,27 +412,17 @@ class DataCleaner:
 
     def _detect_foot_sliding(self, poses: np.ndarray, trans: np.ndarray, 
                            framerate: float) -> Dict[str, Any]:
-        """检测足部滑步"""
+        """【临时】简化检测，仅记录信息，不判定违规
+        足部滑步检测需要正向运动学重建脚部位置，当前版本跳过
+        """
         issues = {
             'has_sliding': False,
             'sliding_frames': [],
-            'details': {}
+            'details': {
+                'info': '足部滑步检测需要正向运动学，当前版本跳过',
+                'avg_horizontal_speed': float(np.mean(np.linalg.norm(np.diff(trans[:, [0, 2]], axis=0), axis=1)))
+            }
         }
-        
-        # 简化的足部滑动检测
-        if len(trans) < 2:
-            return issues
-            
-        # 计算水平速度（忽略Y轴，即垂直方向）
-        horizontal_velocity = np.linalg.norm(np.diff(trans[:, [0, 2]], axis=0), axis=1)
-        
-        # 简单检测：如果整体动作幅度较小，可能存在滑动
-        avg_horizontal_speed = np.mean(horizontal_velocity)
-        if avg_horizontal_speed < 0.01:  # 很小的水平运动
-            issues['has_sliding'] = True
-            issues['sliding_frames'] = list(range(len(poses)))
-            issues['details']['avg_speed'] = float(avg_horizontal_speed)
-            
         return issues
 
     def generate_quality_score(self, validity_report: Dict[str, Any], 

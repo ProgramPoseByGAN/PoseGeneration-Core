@@ -269,50 +269,48 @@ class SkeletonMapper:
         logger.info("训练数据标准化完成")
         return normalized_data, normalization_params
     
-    def generate_bvh_structure(self) -> bvhio.BVH:
+    def generate_bvh_structure(self) -> str:
         """
-        生成BVH骨架结构
+        生成标准BVH文件内容字符串
+        按照BVH标准格式生成HIERARCHY部分
         
         Returns:
-            BVH对象
+            BVH文件内容字符串
         """
         logger.info("生成BVH骨架结构...")
         
-        # 创建根关节（适应新版bvhio API）
-        root = bvhio.BVH()
-        root.name = 'Hips'
-        root.offset = self.initial_offsets['Hips']
+        # BVH文件头
+        bvh_content = "HIERARCHY\nROOT Hips\n{\n"
+        bvh_content += f"\tOFFSET {self.initial_offsets['Hips'][0]} {self.initial_offsets['Hips'][1]} {self.initial_offsets['Hips'][2]}\n"
+        bvh_content += "\tCHANNELS 6 Xposition Yposition Zposition Zrotation Xrotation Yrotation\n"
         
-        # 按层级创建关节树
-        joint_objects = {'Hips': root}
+        # 递归生成子关节
+        def generate_joint(joint_name, indent_level=1):
+            content = ""
+            indent = "\t" * indent_level
+            
+            # 获取子关节
+            children = [name for name, parent_idx in self.target_hierarchy.items() 
+                       if parent_idx == self.target_joint_names.index(joint_name)]
+            
+            for child_name in children:
+                content += f"{indent}JOINT {child_name}\n{indent}{{\n"
+                offset = self.initial_offsets[child_name]
+                content += f"{indent}\tOFFSET {offset[0]} {offset[1]} {offset[2]}\n"
+                content += f"{indent}\tCHANNELS 3 Zrotation Xrotation Yrotation\n"
+                
+                # 递归处理孙关节
+                content += generate_joint(child_name, indent_level + 1)
+                content += f"{indent}}}\n"
+            
+            return content
         
-        # 按拓扑排序创建关节（确保父节点先创建）
-        creation_order = [
-            'Hips', 'LeftUpperLeg', 'RightUpperLeg', 'Spine',
-            'LeftLowerLeg', 'RightLowerLeg', 'Spine1',
-            'LeftFoot', 'RightFoot', 'Spine2',
-            'LeftToes', 'RightToes', 'Neck',
-            'LeftShoulder', 'RightShoulder', 'Head',
-            'LeftUpperArm', 'RightUpperArm',
-            'LeftLowerArm', 'RightLowerArm',
-            'LeftHand', 'RightHand'
-        ]
+        # 生成Hips的子关节
+        bvh_content += generate_joint('Hips')
+        bvh_content += "}\n\n"
         
-        for joint_name in creation_order[1:]:  # 跳过根节点
-            parent_idx = self.target_hierarchy[joint_name]
-            parent_name = self.target_joint_names[parent_idx]
-            parent_obj = joint_objects[parent_name]
-            
-            # 创建新关节（适应新版bvhio API）
-            new_joint = bvhio.BVH()
-            new_joint.name = joint_name
-            new_joint.offset = self.initial_offsets[joint_name]
-            new_joint.parent = parent_obj
-            
-            joint_objects[joint_name] = new_joint
-            
         logger.info("BVH骨架结构生成完成")
-        return root
+        return bvh_content
     
     def save_bvh_file(self, 
                      euler_angles: np.ndarray, 
@@ -320,7 +318,8 @@ class SkeletonMapper:
                      output_path: str,
                      frame_rate: float = 120.0):
         """
-        保存为BVH文件
+        保存为标准BVH文件
+        生成符合Blender/Maya兼容性的标准BVH格式
         
         Args:
             euler_angles: 欧拉角数据 (frames, 22, 3) [Z, X, Y]
@@ -330,56 +329,68 @@ class SkeletonMapper:
         """
         logger.info(f"保存BVH文件: {output_path}")
         
-        # 生成骨架结构
-        root_joint = self.generate_bvh_structure()
-        
-        # 准备帧数据
-        num_frames = euler_angles.shape[0]
-        frame_time = 1.0 / frame_rate
-        
-        # 构造帧数据：[root_pos(3) + root_rot(3) + joint_rot(3)*21]
-        frames_data = []
-        for frame in range(num_frames):
-            # 根节点数据：位置(3) + 旋转(3)
-            root_data = list(root_translations[frame]) + list(euler_angles[frame, 0])
-            
-            # 其他关节数据：每个3个旋转值
-            joint_data = []
-            for joint_idx in range(1, self.TARGET_JOINTS):  # 跳过根节点
-                joint_data.extend(euler_angles[frame, joint_idx])
-                
-            frame_data = root_data + joint_data
-            frames_data.append(frame_data)
-            
-        # 创建BVH对象（适应新版bvhio API）
-        bvh = bvhio.BVH()
-        bvh.root = root_joint
-        bvh.frames = frames_data
-        bvh.frame_time = frame_time
-        
-        # 确保输出目录存在
-        output_dir = Path(output_path).parent
-        output_dir.mkdir(parents=True, exist_ok=True)
-        
-        # 保存文件（适配新版bvhio API）
         try:
-            # 尝试多种可能的保存方法
-            if hasattr(bvhio, 'write'):
-                bvhio.write(bvh, output_path)
-            elif hasattr(bvhio, 'save'):
-                bvhio.save(bvh, output_path)
-            elif hasattr(bvh, 'write'):
-                bvh.write(output_path)
-            elif hasattr(bvh, 'save'):
-                bvh.save(output_path)
-            else:
-                # 如果都没有，尝试直接写入文件
-                with open(output_path, 'w') as f:
-                    f.write(str(bvh))
+            # 生成骨架结构
+            bvh_header = self.generate_bvh_structure()
+            
+            # 准备帧数据
+            num_frames = euler_angles.shape[0]
+            frame_time = 1.0 / frame_rate
+            
+            # 构造帧数据：按照BVH标准顺序排列
+            # 顺序：根节点位置(3) + 根节点旋转(3) + 其他关节旋转(3*21)
+            motion_lines = []
+            
+            # 定义关节顺序（必须与HIERARCHY部分一致）
+            joint_order = [
+                'Hips', 'LeftUpperLeg', 'RightUpperLeg', 'Spine',
+                'LeftLowerLeg', 'RightLowerLeg', 'Spine1',
+                'LeftFoot', 'RightFoot', 'Spine2',
+                'LeftToes', 'RightToes', 'Neck',
+                'LeftShoulder', 'RightShoulder', 'Head',
+                'LeftUpperArm', 'RightUpperArm',
+                'LeftLowerArm', 'RightLowerArm',
+                'LeftHand', 'RightHand'
+            ]
+            
+            for frame in range(num_frames):
+                # 根节点数据：位置(3) + 旋转(3)
+                root_pos = root_translations[frame]
+                root_rot = euler_angles[frame, 0]  # Hips关节
+                frame_data = [root_pos[0], root_pos[1], root_pos[2], 
+                             root_rot[0], root_rot[1], root_rot[2]]
+                
+                # 其他关节数据：每个3个旋转值
+                for joint_name in joint_order[1:]:  # 跳过根节点
+                    joint_idx = self.target_joint_names.index(joint_name)
+                    joint_rot = euler_angles[frame, joint_idx]
+                    frame_data.extend([joint_rot[0], joint_rot[1], joint_rot[2]])
+                    
+                # 格式化为字符串
+                motion_line = " ".join([f"{val:.6f}" for val in frame_data])
+                motion_lines.append(motion_line)
+            
+            # 组合完整BVH文件
+            bvh_content = bvh_header
+            bvh_content += f"MOTION\nFrames: {num_frames}\n"
+            bvh_content += f"Frame Time: {frame_time:.6f}\n"
+            bvh_content += "\n".join(motion_lines)
+            
+            # 确保输出目录存在
+            output_dir = Path(output_path).parent
+            output_dir.mkdir(parents=True, exist_ok=True)
+            
+            # 写入文件
+            with open(output_path, 'w', encoding='utf-8') as f:
+                f.write(bvh_content)
+                
+            logger.info(f"BVH文件保存完成: {output_path}")
+            logger.info(f"文件大小: {len(bvh_content)} 字符")
+            
         except Exception as e:
             logger.error(f"BVH保存失败: {e}")
+            logger.error(f"错误类型: {type(e).__name__}")
             raise
-        logger.info(f"BVH文件保存完成: {output_path}")
     
     def save_training_data(self, 
                           normalized_data: np.ndarray,
