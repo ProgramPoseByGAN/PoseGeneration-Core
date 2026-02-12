@@ -1,50 +1,61 @@
 """
 数据预处理主流程控制模块
 整合数据读取、姿态转换、骨骼映射、数据清洗的完整处理流程
+该模块提供了一个统一的接口来协调各个子模块的工作，实现端到端的数据预处理解决方案
 
 处理流程：
-1. 数据读取 → 2. 姿态转换 → 3. 骨骼映射 → 4. 数据清洗与异常处理
+1. 数据读取：从AMASS数据集中加载原始姿态数据
+2. 姿态转换：将原始轴角表示转换为旋转矩阵等中间表示
+3. 骨骼映射：将SMPL 24关节体系映射到项目22关节标准
+4. 数据清洗与异常处理：检测并处理数据质量问题
 """
 
-import os
-import logging
-from typing import Dict, List, Any, Optional, Tuple
-from pathlib import Path
-from datetime import datetime
-import numpy as np
-import argparse
+# 系统和第三方库导入
+import os                                      # 操作系统接口
+import logging                                # 日志记录模块
+from typing import Dict, List, Any, Optional, Tuple  # 类型提示支持
+from pathlib import Path                      # 现代路径操作库
+from datetime import datetime                 # 日期时间处理
+import numpy as np                            # 数值计算核心库
+import argparse                              # 命令行参数解析
 
-# 导入各个功能模块
-from data_reader import AMASSDataReader
-from pose_converter import PoseConverter
-from skeleton_mapper import SkeletonMapper
-from data_cleaner import DataCleaner, DataQualityReport
+# 导入各个功能子模块
+from data_reader import AMASSDataReader      # 数据读取模块
+from pose_converter import PoseConverter     # 姿态转换模块
+from skeleton_mapper import SkeletonMapper   # 骨骼映射模块
+from data_cleaner import DataCleaner, DataQualityReport  # 数据清洗模块
 
-# 配置日志
+# 配置日志系统 - 设置统一的日志格式和级别
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
+    level=logging.INFO,                                    # 设置日志级别为INFO
+    format='%(asctime)s - %(levelname)s - %(message)s'    # 定义日志输出格式
 )
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)  # 创建模块专用日志记录器
 
 class PreprocessingPipeline:
-    """数据预处理流水线"""
+    """数据预处理流水线
+    协调各个处理模块形成完整的端到端数据预处理流程
+    提供统一的API接口支持单文件处理、批量处理和数据集级处理
+    """
     
     def __init__(self, dataset_root: str = r"D:\LAB\Pose\PoseGeneration-Core\dataset\AMASS"):
         """
-        初始化预处理流水线
+        初始化预处理流水线实例
+        创建并配置所有必要的处理子模块
         
         Args:
-            dataset_root: 数据集根目录
+            dataset_root: AMASS数据集的根目录路径
         """
+        # 存储数据集根目录路径
         self.dataset_root = Path(dataset_root)
         
-        # 初始化各个处理模块
-        self.data_reader = AMASSDataReader(str(self.dataset_root))
-        self.pose_converter = PoseConverter()
-        self.skeleton_mapper = SkeletonMapper()
-        self.data_cleaner = DataCleaner()
+        # 初始化各个处理子模块实例
+        self.data_reader = AMASSDataReader(str(self.dataset_root))  # 数据读取器
+        self.pose_converter = PoseConverter()                       # 姿态转换器
+        self.skeleton_mapper = SkeletonMapper()                     # 骨骼映射器
+        self.data_cleaner = DataCleaner()                           # 数据清洗器
         
+        # 记录初始化完成信息
         logger.info("PreprocessingPipeline初始化完成")
         logger.info(f"数据集根目录: {self.dataset_root}")
     
@@ -55,17 +66,18 @@ class PreprocessingPipeline:
                           generate_training_data: bool = True,
                           perform_cleaning: bool = True) -> Dict[str, Any]:
         """
-        处理单个AMASS文件的完整流程
+        处理单个AMASS文件的完整预处理流程
+        按照标准流程依次执行数据读取、清洗、转换、映射等步骤
         
         Args:
-            input_file: 输入文件路径
-            output_dir: 输出目录
-            generate_bvh: 是否生成BVH文件
-            generate_training_data: 是否生成训练数据
-            perform_cleaning: 是否执行数据清洗
+            input_file: 待处理的AMASS .npz文件路径
+            output_dir: 处理结果的输出目录
+            generate_bvh: 是否生成BVH动画文件（用于可视化）
+            generate_training_data: 是否生成标准化的训练数据
+            perform_cleaning: 是否执行数据质量检查和清洗
             
         Returns:
-            处理结果字典
+            包含处理结果和状态信息的字典
         """
         logger.info("="*80)
         logger.info(f"开始处理文件: {input_file}")
@@ -300,7 +312,7 @@ def main():
     
     # 文件参数
     parser.add_argument("--input-file", help="单文件处理时的输入文件路径")
-    parser.add_argument("--max-files", type=int, default=100,
+    parser.add_argument("--max-files", type=int, default=10,
                        help="最大处理文件数")
     
     # 处理选项
