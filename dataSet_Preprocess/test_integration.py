@@ -2,21 +2,29 @@
 """
 整合测试脚本
 测试所有模块的功能集成和协同工作
+该脚本验证各个模块能否正确导入、初始化和协同工作
+确保整个预处理系统的完整性和稳定性
 """
 
-import os
-import sys
-import numpy as np
-from pathlib import Path
+# 系统和第三方库导入
+import os                    # 操作系统接口
+import sys                   # 系统相关功能
+import numpy as np          # 数值计算库
+from pathlib import Path    # 现代路径操作库
 
-# 添加当前目录到Python路径
+# 添加当前脚本所在目录到Python模块搜索路径
+# 确保能够正确导入本地模块
 sys.path.insert(0, str(Path(__file__).parent))
 
 def test_module_imports():
-    """测试模块导入"""
+    """测试所有核心模块的导入功能
+    验证各个模块文件是否存在且能够正确导入
+    这是系统集成测试的第一步
+    """
     print("=== 测试模块导入 ===")
     
     try:
+        # 测试数据读取模块导入
         from data_reader import AMASSDataReader
         print("✓ data_reader 模块导入成功")
     except ImportError as e:
@@ -24,6 +32,7 @@ def test_module_imports():
         return False
     
     try:
+        # 测试姿态转换模块导入
         from pose_converter import PoseConverter
         print("✓ pose_converter 模块导入成功")
     except ImportError as e:
@@ -31,6 +40,7 @@ def test_module_imports():
         return False
     
     try:
+        # 测试骨骼映射模块导入
         from skeleton_mapper import SkeletonMapper
         print("✓ skeleton_mapper 模块导入成功")
     except ImportError as e:
@@ -38,6 +48,7 @@ def test_module_imports():
         return False
     
     try:
+        # 测试数据清洗模块导入
         from data_cleaner import DataCleaner, DataQualityReport
         print("✓ data_cleaner 模块导入成功")
     except ImportError as e:
@@ -45,6 +56,7 @@ def test_module_imports():
         return False
     
     try:
+        # 测试主流程控制模块导入
         from preprocessing_pipeline import PreprocessingPipeline
         print("✓ preprocessing_pipeline 模块导入成功")
     except ImportError as e:
@@ -54,17 +66,19 @@ def test_module_imports():
     return True
 
 def test_data_reader():
-    """测试数据读取模块"""
+    """测试数据读取模块的核心功能
+    验证AMASSDataReader类的初始化和基本功能
+    """
     print("\n=== 测试数据读取模块 ===")
     
     try:
         from data_reader import AMASSDataReader
         
-        # 创建读取器实例
+        # 创建数据读取器实例
         reader = AMASSDataReader()
         print("✓ AMASSDataReader 实例创建成功")
         
-        # 测试获取样本文件（不实际访问文件系统）
+        # 测试样本文件获取功能（不实际访问文件系统）
         samples = reader.get_sample_files(count=3, include_stageii_only=False)
         print(f"✓ 样本文件获取成功: {len(samples)} 个文件")
         
@@ -72,6 +86,9 @@ def test_data_reader():
         
     except Exception as e:
         print(f"✗ 数据读取模块测试失败: {e}")
+        # 打印详细的错误追踪信息
+        import traceback
+        traceback.print_exc()
         return False
 
 def test_pose_converter():

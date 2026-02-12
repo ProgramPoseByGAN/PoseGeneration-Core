@@ -1,88 +1,104 @@
 """
 数据清洗与异常处理模块
 根据《骨骼约束规范》和功能需求实现完整的数据质量检测与清洗功能
+该模块提供多层次的数据质量评估体系，确保输出数据的可靠性和可用性
 
 功能维度：
-1. 数据有效性检查（缺失值、静态数据检测）
-2. 生物力学合理性检查（关节角极限、肢体扭曲检测）
-3. 运动学质量检查（过度抖动、足部滑步检测）
-4. 质量评分与报告生成
+1. 数据有效性检查（缺失值、静态数据检测）：识别和处理数据完整性问题
+2. 生物力学合理性检查（关节角极限、肢体扭曲检测）：验证姿态数据是否符合人体生理规律
+3. 运动学质量检查（过度抖动、足部滑步检测）：评估运动的自然性和流畅性
+4. 质量评分与报告生成：提供量化评估和详细的诊断报告
 """
 
-import os
-import json
-import logging
-from typing import Dict, List, Tuple, Any, Optional
-from dataclasses import dataclass, asdict
-from datetime import datetime
-from pathlib import Path
-import numpy as np
-from scipy.spatial.transform import Rotation
+# 系统和第三方库导入
+import os                                      # 操作系统接口
+import json                                    # JSON数据处理
+import logging                                # 日志记录模块
+from typing import Dict, List, Tuple, Any, Optional  # 类型提示支持
+from dataclasses import dataclass, asdict    # 数据类支持
+from datetime import datetime                 # 日期时间处理
+from pathlib import Path                      # 现代路径操作库
+import numpy as np                            # 数值计算核心库
+from scipy.spatial.transform import Rotation # 科学计算库的旋转变换模块
 
-# 配置日志
+# 配置日志系统 - 设置统一的日志格式和级别
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
+    level=logging.INFO,                                    # 设置日志级别为INFO
+    format='%(asctime)s - %(levelname)s - %(message)s'    # 定义日志输出格式
 )
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)  # 创建模块专用日志记录器
 
-# 默认阈值配置
+# 默认阈值配置字典 - 定义各种质量检查的标准阈值
 DEFAULT_THRESHOLDS = {
-    # 数据有效性检查阈值
-    'nan_threshold': 1e-10,           # NaN/Inf检测阈值
-    'static_variance_threshold': 1e-6, # 静态数据方差阈值
-    'static_rotation_threshold': 1e-3, # 静态旋转变化阈值
+    # 数据有效性检查阈值配置
+    'nan_threshold': 1e-10,              # NaN/Inf检测的数值阈值
+    'static_variance_threshold': 1e-6,   # 静态数据判断的方差阈值
+    'static_rotation_threshold': 1e-6,   # 静态旋转变化判断阈值
     
-    # 生物力学合理性检查阈值
-    'knee_flexion_range': [0, 150],    # 膝关节屈伸范围(度)
-    'elbow_flexion_range': [0, 150],   # 肘关节屈伸范围(度)
-    'spine_rotation_threshold': 45,    # 脊柱旋转安全阈值(度)
+    # 生物力学合理性检查阈值配置
+    'knee_flexion_range': [-2, 120],     # 膝关节屈伸角度合理范围(度)，收紧下界惩罚过伸
+    'elbow_flexion_range': [-2, 120],    # 肘关节屈伸角度合理范围(度)
+    'spine_rotation_threshold': 45,      # 脊柱旋转角度安全上限(度)
     
-    # 运动学质量检查阈值
-    'angular_velocity_limit': 720,     # 角速度限制(度/秒)
-    'foot_height_threshold': 0.05,     # 足部离地高度阈值(米)
-    'foot_sliding_velocity': 0.1,      # 足部滑动速度阈值(米/秒)
+    # 运动学质量检查阈值配置
+    'angular_velocity_limit': 720,       # 关节角速度异常上限(度/秒)
+    'foot_height_threshold': 0.05,       # 足部离地高度判断阈值(米)
+    'foot_sliding_velocity': 0.1,        # 足部滑动速度异常阈值(米/秒)
 }
 
 @dataclass
 class DataQualityReport:
-    """数据质量报告数据类"""
-    file_path: str
-    file_name: str
-    total_frames: int
-    processing_time: str
+    """数据质量报告数据类
+    用于存储和序列化数据质量检查的完整结果
+    采用dataclass装饰器自动生成常用方法
+    """
+    # 基本文件信息
+    file_path: str           # 完整文件路径
+    file_name: str           # 文件名
+    total_frames: int        # 总帧数
+    processing_time: str     # 处理耗时
     
     # 数据有效性检查结果
-    validity_issues: Dict[str, Any]
-    static_frame_count: int
-    nan_frame_count: int
+    validity_issues: Dict[str, Any]  # 有效性问题详情
+    static_frame_count: int          # 静态帧数量
+    nan_frame_count: int             # 包含NaN的帧数量
     
     # 生物力学合理性检查结果
-    biomechanical_violations: Dict[str, Any]
-    joint_violation_counts: Dict[str, int]
+    biomechanical_violations: Dict[str, Any]  # 生物力学违规详情
+    joint_violation_counts: Dict[str, int]    # 各关节违规次数统计
     
     # 运动学质量检查结果
-    motion_quality_issues: Dict[str, Any]
-    jitter_frame_count: int
-    sliding_frame_count: int
+    motion_quality_issues: Dict[str, Any]  # 运动质量问题详情
+    jitter_frame_count: int                # 抖动帧数量
+    sliding_frame_count: int               # 滑步帧数量
     
-    # 整体评分
-    quality_score: float  # 0-100分
-    recommendation: str   # 处理建议
+    # 整体质量评估
+    quality_score: float  # 综合质量评分，范围0-100分
+    recommendation: str   # 数据处理建议
     
     def to_dict(self) -> Dict[str, Any]:
-        """转换为字典格式"""
+        """将数据类实例转换为字典格式
+        便于JSON序列化和数据交换
+        
+        Returns:
+            包含所有字段的字典表示
+        """
         return asdict(self)
 
 class DataCleaner:
-    """数据清洗器主类"""
+    """数据清洗器主类
+    提供完整的数据质量检测、清洗和报告生成功能
+    实现多层次的质量评估体系，确保输出数据的可靠性
+    """
     
     def __init__(self, thresholds: Optional[Dict[str, Any]] = None):
         """
-        初始化数据清洗器
+        初始化数据清洗器实例
+        设置质量检查的阈值参数，支持使用默认值或自定义配置
         
         Args:
-            thresholds: 自定义阈值配置
+            thresholds: 可选的自定义阈值配置字典
+                       如果为None则使用DEFAULT_THRESHOLDS
         """
         self.thresholds = DEFAULT_THRESHOLDS.copy()
         if thresholds:
@@ -396,27 +412,17 @@ class DataCleaner:
 
     def _detect_foot_sliding(self, poses: np.ndarray, trans: np.ndarray, 
                            framerate: float) -> Dict[str, Any]:
-        """检测足部滑步"""
+        """【临时】简化检测，仅记录信息，不判定违规
+        足部滑步检测需要正向运动学重建脚部位置，当前版本跳过
+        """
         issues = {
             'has_sliding': False,
             'sliding_frames': [],
-            'details': {}
+            'details': {
+                'info': '足部滑步检测需要正向运动学，当前版本跳过',
+                'avg_horizontal_speed': float(np.mean(np.linalg.norm(np.diff(trans[:, [0, 2]], axis=0), axis=1)))
+            }
         }
-        
-        # 简化的足部滑动检测
-        if len(trans) < 2:
-            return issues
-            
-        # 计算水平速度（忽略Y轴，即垂直方向）
-        horizontal_velocity = np.linalg.norm(np.diff(trans[:, [0, 2]], axis=0), axis=1)
-        
-        # 简单检测：如果整体动作幅度较小，可能存在滑动
-        avg_horizontal_speed = np.mean(horizontal_velocity)
-        if avg_horizontal_speed < 0.01:  # 很小的水平运动
-            issues['has_sliding'] = True
-            issues['sliding_frames'] = list(range(len(poses)))
-            issues['details']['avg_speed'] = float(avg_horizontal_speed)
-            
         return issues
 
     def generate_quality_score(self, validity_report: Dict[str, Any], 

@@ -1,60 +1,66 @@
 #!/usr/bin/env python3
 """
 数据预处理模块演示脚本
-展示完整的数据处理流程
+展示完整的数据处理流程和各模块的使用方法
+该脚本通过创建模拟数据来演示整个预处理系统的功能
 """
 
-import numpy as np
-import os
-from pathlib import Path
+# 系统和第三方库导入
+import numpy as np          # 数值计算库，用于生成测试数据
+import os                   # 操作系统接口
+from pathlib import Path    # 现代路径操作库
 
-# 添加当前目录到Python路径
+# 添加当前脚本所在目录到Python模块搜索路径
 import sys
 sys.path.insert(0, str(Path(__file__).parent))
 
 def demonstrate_complete_workflow():
-    """演示完整的数据处理工作流程"""
+    """演示完整的数据处理工作流程
+    通过模拟数据展示从原始姿态数据到标准化输出的完整处理链路
+    包括数据读取、转换、映射、清洗等所有核心步骤
+    """
     print("=" * 60)
     print("AMASS数据预处理模块演示")
     print("=" * 60)
     
     try:
-        # 1. 导入所有模块
+        # 1. 导入所有核心处理模块
         print("\n1. 导入模块...")
-        from data_reader import AMASSDataReader
-        from pose_converter import PoseConverter
-        from skeleton_mapper import SkeletonMapper
-        from data_cleaner import DataCleaner
-        from preprocessing_pipeline import PreprocessingPipeline
+        from data_reader import AMASSDataReader      # 数据读取模块
+        from pose_converter import PoseConverter     # 姿态转换模块
+        from skeleton_mapper import SkeletonMapper   # 骨骼映射模块
+        from data_cleaner import DataCleaner         # 数据清洗模块
+        from preprocessing_pipeline import PreprocessingPipeline  # 主流程控制模块
         print("✓ 所有模块导入成功")
         
-        # 2. 创建测试数据
+        # 2. 创建模拟的AMASS格式测试数据
         print("\n2. 创建测试数据...")
-        test_frames = 50
-        # 创建合理的AMASS格式测试数据
+        test_frames = 50  # 测试数据帧数
+        # 创建符合AMASS格式的模拟姿态数据
         test_poses = np.random.randn(test_frames, 156) * 0.2  # 轴角表示，小幅随机值
-        test_trans = np.random.randn(test_frames, 3) * 0.05   # 位移数据
+        test_trans = np.random.randn(test_frames, 3) * 0.05   # 根节点位移数据
         test_betas = np.random.randn(10) * 0.1               # 身体形状参数
         test_dmpls = np.random.randn(test_frames, 8) * 0.01  # 动态形状参数
         
-        # 模拟真实AMASS数据的一些特性
-        # 让某些关节角度保持在合理范围内
+        # 模拟真实AMASS数据的生物力学特性
+        # 让关键关节角度保持在生理合理范围内
         for frame in range(test_frames):
-            # 限制膝关节角度在合理范围内
+            # 限制膝关节屈伸角度在合理生理范围内
             knee_indices = [4*3, 5*3]  # left_knee, right_knee (索引12,15)
             for idx in knee_indices:
-                if idx + 2 < 156:  # 确保不越界
-                    # 限制X轴旋转（屈伸）在0-150度范围内
-                    test_poses[frame, idx] = np.clip(test_poses[frame, idx], 0, 2.6)  # 约150度
+                if idx + 2 < 156:  # 确保数组索引不越界
+                    # 限制X轴旋转（屈伸）在0-150度范围内（约2.6弧度）
+                    test_poses[frame, idx] = np.clip(test_poses[frame, idx], 0, 2.6)
         
+        # 构造完整的AMASS数据字典结构
         test_data = {
-            'poses': test_poses,
-            'trans': test_trans,
-            'betas': test_betas,
-            'dmpls': test_dmpls,
-            'gender': 'neutral',
-            'mocap_framerate': 120.0,
-            '_metadata': {
+            'poses': test_poses,           # 姿态数据（轴角表示）
+            'trans': test_trans,           # 根节点位移数据
+            'betas': test_betas,           # 身体形状参数
+            'dmpls': test_dmpls,           # 动态形状参数
+            'gender': 'neutral',           # 性别信息
+            'mocap_framerate': 120.0,      # 动作捕捉帧率
+            '_metadata': {                 # 文件元数据
                 'file_path': './test_data.npz',
                 'file_name': 'test_data.npz',
                 'file_size': 1024 * 1024,  # 1MB
